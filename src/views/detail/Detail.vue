@@ -1,15 +1,17 @@
 <template>
   <div id="detail">
-    <detail-nav-bar class="detail-nav"/>
-    <scroll class="content" ref="scroll">
+    <detail-nav-bar ref="nav" class="detail-nav" @titleClick="titleClick"/>
+    <scroll class="content" ref="scroll" :probe-type="3" @scroll="contentScroll">
       <detail-swiper :top-images="topImages"/>
       <detail-base-info :goods="goods"/>
       <detail-shop-info :shop="shop"/>
       <detail-goods-info :detail-info="detailInfo" @imageLoad="imageLoad"/>
-      <detail-param-info :param-info="paramInfo"/>
-      <detail-comment-info :comment-info="commentInfo"/>
-      <goods-list :goods="recommends"/>
+      <detail-param-info ref="params" :param-info="paramInfo"/>
+      <detail-comment-info ref="comment" :comment-info="commentInfo"/>
+      <goods-list ref="recommend" :goods="recommends"/>
     </scroll>
+    <detail-bottom-bar/>
+    <back-top @click.native="backClick" v-show="isShowBackTop"/>
   </div>
 </template>
 
@@ -21,12 +23,13 @@
   import DetailGoodsInfo from "./childComps/DetailGoodsInfo";
   import DetailParamInfo from "./childComps/DetailParamInfo";
   import DetailCommentInfo from "./childComps/DetailCommentInfo";
+  import DetailBottomBar from "./childComps/DetailBottomBar";
 
   import Scroll from "components/common/scroll/Scroll";
   import GoodsList from "components/content/goods/GoodsList";
 
   import {getdetail, getRecommend,Goods, Shop, GoodParams} from "network/detail";
-  import {itemListenerMixin} from "common/mixin";
+  import {itemListenerMixin, backTopMixin} from "common/mixin";
 
   export default {
     name: "Detail",
@@ -38,6 +41,7 @@
       DetailGoodsInfo,
       DetailParamInfo,
       DetailCommentInfo,
+      DetailBottomBar,
       Scroll,
       GoodsList,
     },
@@ -51,9 +55,11 @@
         paramInfo: {},
         commentInfo: {},
         recommends: [],
+        themeTopYs: [],
+        currentIndex: 0,
       }
     },
-    mixins: [itemListenerMixin],
+    mixins: [itemListenerMixin, backTopMixin],
     created() {
       // 1.保存传入的iid
       this.iid = this.$route.params.iid
@@ -83,6 +89,28 @@
         if(data.rate.cRate !== 0) {
           this.commentInfo = data.rate.list[0]
         }
+
+        /*// 把值送入themeTopYs方法一：值不对
+        // 值不对的原因：this.$refs.params.$el压根没有渲染
+        this.themeTopYs = []
+        this.themeTopYs.push(0)
+        this.themeTopYs.push(-(this.$refs.params.$el.offsetTop))
+        this.themeTopYs.push(-(this.$refs.comment.$el.offsetTop))
+        this.themeTopYs.push(-(this.$refs.recommend.$el.offsetTop))
+        console.log(this.themeTopYs);
+
+        // 把值送入themeTopYs方法二：等上面的数据传到组建中，渲染完就会回调下面这个函数
+        this.$nextTick(() => {
+          // 根据最新的数据，对应的dom试衣镜被渲染出来了
+          // 但是图片依然是没有加载完(目前获取的offsetTop是没有图片的)
+          // offsetTop值不对，都是因为图片的没有计算在内问题
+          this.themeTopYs = []
+          this.themeTopYs.push(0)
+          this.themeTopYs.push(-(this.$refs.params.$el.offsetTop))
+          this.themeTopYs.push(-(this.$refs.comment.$el.offsetTop))
+          this.themeTopYs.push(-(this.$refs.recommend.$el.offsetTop))
+          console.log(this.themeTopYs);
+        })*/
       })
 
       // 3.请求推荐数据
@@ -93,12 +121,64 @@
     },
     mounted() {
     },
+    updated() {
+      // 把值送入themeTopYs方法三
+      // this.themeTopYs = []
+      // this.themeTopYs.push(0)
+      // this.themeTopYs.push(-(this.$refs.params.$el.offsetTop))
+      // this.themeTopYs.push(-(this.$refs.comment.$el.offsetTop))
+      // this.themeTopYs.push(-(this.$refs.recommend.$el.offsetTop))
+      // console.log(this.themeTopYs);
+    },
     destroyed() {
       this.$bus.$off('itemImgLoad', this.itemImageLisener)
     },
     methods: {
       imageLoad() {
-        this.$refs.scroll.refresh()
+        this.newRefresh()
+        // this.$refs.scroll.refresh()
+        this.themeTopYs = []
+        this.themeTopYs.push(0)
+        this.themeTopYs.push(this.$refs.params.$el.offsetTop)
+        this.themeTopYs.push(this.$refs.comment.$el.offsetTop)
+        this.themeTopYs.push(this.$refs.recommend.$el.offsetTop)
+        this.themeTopYs.push(Number.MAX_VALUE) // hack做法放入一个最大值
+      },
+      titleClick(index) {
+        this.$refs.scroll.scrollTo(0, -(this.themeTopYs[index]), 500)
+      },
+      contentScroll(position) {
+        // 1.获取y值
+        const positionY = -position.y
+
+        let length = this.themeTopYs.length
+
+        // 2.positionY和主题中的值进行对比
+        for(let i = 0; i< length; i++) {
+          // hack做法
+          // positoiny在0和7938之间，index=0
+          // positoiny在=7938 和9120之间，index = 1
+          // positoinY在9120 和9452之间，index = 2
+          // positoiny在9120 和 非常大 的值之间，index = 3
+          // 所以就this.themeTopYs.push(Number.MAX_VALUE)
+          if((this.currentIndex !== i) && (i< length - 1 && positionY >= this.themeTopYs[i] && positionY <this.themeTopYs[i+1])) {
+            this.currentIndex = i
+            this.$refs.nav.currentIndex = this.currentIndex
+          }
+
+          // 普通做法
+          // positoiny在0和7938之间，index=0
+          // positoiny在=7938 和9120之间，index = 1
+          // positoinY在9120 和9452之间，index = 2
+          // positoiny大于等于9120，index = 3
+          // if((this.currentIndex !== i) && ((i< length - 1 && positionY >= this.themeTopYs[i] && positionY <this.themeTopYs[i+1]) || (i === length -1 && positionY > this.themeTopYs[i]))) {
+          //   this.currentIndex = i
+          //   this.$refs.nav.currentIndex = this.currentIndex
+          // }
+        }
+
+        // 监听是否展示backtop
+        this.listenShowBackTop(position)
       }
     }
   }
@@ -107,7 +187,7 @@
 <style scoped>
   #detail {
     position: relative;
-    z-index: 9;
+    z-index: 1;
     background-color: #ffffff;
     height: 100vh;
   }
@@ -119,6 +199,11 @@
   }
 
   .content {
-    height: calc(100vh - 44px);
+    /*height: calc(100% - 44px - 49px);*/
+    position: absolute;
+    top: 44px;
+    bottom: 49px;
+    left: 0;
+    right: 0;
   }
 </style>
