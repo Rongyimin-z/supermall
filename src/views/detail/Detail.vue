@@ -10,7 +10,7 @@
       <detail-comment-info ref="comment" :comment-info="commentInfo"/>
       <goods-list ref="recommend" :goods="recommends"/>
     </scroll>
-    <detail-bottom-bar/>
+    <detail-bottom-bar @addToCart="addToCart"/>
     <back-top @click.native="backClick" v-show="isShowBackTop"/>
   </div>
 </template>
@@ -30,6 +30,8 @@
 
   import {getdetail, getRecommend,Goods, Shop, GoodParams} from "network/detail";
   import {itemListenerMixin, backTopMixin} from "common/mixin";
+
+  import { mapActions } from 'vuex'
 
   export default {
     name: "Detail",
@@ -134,6 +136,7 @@
       this.$bus.$off('itemImgLoad', this.itemImageLisener)
     },
     methods: {
+      ...mapActions(['addCart']),
       imageLoad() {
         this.newRefresh()
         // this.$refs.scroll.refresh()
@@ -179,6 +182,27 @@
 
         // 监听是否展示backtop
         this.listenShowBackTop(position)
+      },
+      addToCart() {
+        // 1.获取购物车需要展示的信息
+        const product = {}
+        product.image = this.topImages[0]
+        product.title = this.goods.title
+        product.desc = this.goods.desc
+        product.price = this.goods.realPrice
+        product.iid = this.iid
+
+        // 2.将商品添加到购物车
+        // 不能直接在这操作vuex数据
+        // this.$state.cartList.push(product)
+        // this.$store.commit('addCart', product)
+        // this.$store.dispatch('addCart', product).then(res => {
+        //   console.log(res);
+        // })
+        // 或者映射actions的方法到methods里，就像映射getters一样
+        this.addCart(product).then(res => {
+          this.$toast.show(res, 2000)
+        })
       }
     }
   }
@@ -190,6 +214,7 @@
     z-index: 1;
     background-color: #ffffff;
     height: 100vh;
+    overflow: hidden;
   }
 
   .detail-nav {
